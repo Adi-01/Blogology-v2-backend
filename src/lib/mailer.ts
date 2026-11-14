@@ -17,6 +17,9 @@ async function getTransporter(): Promise<Transporter> {
         user: env.SMTP_USER,
         pass: env.SMTP_PASS,
       },
+      connectionTimeout: 8000,
+      greetingTimeout: 8000,
+      socketTimeout: 8000,
     });
     return transporter;
   }
@@ -51,7 +54,39 @@ export interface SendMailOptions {
   text: string;
 }
 
+async function sendViaBrevo(options: SendMailOptions): Promise<void> {
+  const senderEmail = env.SMTP_USER || "pushpamaditya@gmail.com";
+  const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    headers: {
+      "api-key": env.BREVO_API_KEY!,
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+    },
+    body: JSON.stringify({
+      sender: { name: "Blogology", email: senderEmail },
+      to: [{ email: options.to }],
+      subject: options.subject,
+      htmlContent: options.html,
+      textContent: options.text,
+    }),
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    logger.error("Brevo API error:", { error: errorText });
+    throw new Error(`Brevo mail delivery failed: ${errorText}`);
+  }
+
+  logger.info("Email delivered successfully via Brevo HTTPS API", { to: options.to });
+}
+
 export async function sendEmail(options: SendMailOptions): Promise<void> {
+  if (env.BREVO_API_KEY) {
+    await sendViaBrevo(options);
+    return;
+  }
+
   const mailer = await getTransporter();
 
   const info = await mailer.sendMail({
