@@ -1,0 +1,249 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum PostStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum PlanName {
+  FREE
+  PRO
+}
+
+model Plan {
+  id           String    @id @default(uuid())
+  name         PlanName  @unique
+  aiDailyLimit Int       @default(10)
+  price        Int       @default(0) // In cents (e.g. 1000 = $10.00)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  users        User[]
+}
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  username     String    @unique
+  passwordHash String?   // Nullable for OAuth-only users
+  name         String
+  bio          String?
+  avatar       String?
+  planId               String
+  plan                 Plan      @relation(fields: [planId], references: [id])
+  stripeCustomerId     String?   @unique
+  stripeSubscriptionId String?   @unique
+  hasOnboarded         Boolean   @default(false)
+  isDeleted    Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  sessions       Session[]
+  resetTokens    PasswordResetToken[]
+  posts          Post[]
+  interests      Interest[]
+  likes          Like[]
+  bookmarks      Bookmark[]
+  comments       Comment[]
+  commentLikes   CommentLike[]
+  following      Follow[]   @relation("UserFollowing")
+  followers      Follow[]   @relation("UserFollowers")
+  blockedUsers   Block[]    @relation("UserBlocker")
+  blockedBy      Block[]    @relation("UserBlocked")
+  aiUsage        AiUsage[]
+
+  @@index([username])
+  @@index([email])
+}
+
+model Session {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash   String    @unique // SHA-256 hash of opaque token
+  deviceLabel String?
+  ipHint      String?
+  expiresAt   DateTime
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([tokenHash])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique // SHA-256 hash of reset token
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([tokenHash])
+  @@index([userId])
+}
+
+model Post {
+  id           String     @id @default(uuid())
+  authorId     String
+  author       User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  title        String
+  content      Json       // BlockNote block structure
+  coverImage   String?
+  status       PostStatus @default(DRAFT)
+  score        Float      @default(0)
+  readingTime  Int        @default(0) // Estimated reading time in minutes
+  viewCount    Int        @default(0)
+  summary      String?
+  summarisedAt DateTime?
+  isDeleted    Boolean    @default(false)
+  publishedAt  DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  tags         PostTag[]
+  likes        Like[]
+  bookmarks    Bookmark[]
+  comments     Comment[]
+
+  @@index([authorId])
+  @@index([status, score(sort: Desc)])
+  @@index([publishedAt])
+}
+
+model Tag {
+  id            String     @id @default(uuid())
+  name          String     @unique // Always stored lowercase
+  createdAt     DateTime   @default(now())
+
+  posts         PostTag[]
+  userInterests Interest[]
+
+  @@index([name])
+}
+
+model PostTag {
+  postId String
+  tagId  String
+  post   Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([postId, tagId])
+  @@index([tagId])
+  @@index([postId])
+}
+
+model Interest {
+  userId String
+  tagId  String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([userId, tagId])
+  @@index([tagId])
+  @@index([userId])
+}
+
+model Like {
+  userId    String
+  postId    String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@id([userId, postId])
+  @@index([postId])
+  @@index([userId])
+}
+
+model Bookmark {
+  userId    String
+  postId    String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@id([userId, postId])
+  @@index([userId])
+  @@index([postId])
+}
+
+model Comment {
+  id        String    @id @default(uuid())
+  postId    String
+  authorId  String
+  parentId  String?
+  body      String
+  isDeleted Boolean   @default(false)
+  deletedAt DateTime?
+  deletedBy String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  post      Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author    User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  parent    Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies   Comment[] @relation("CommentReplies")
+  likes     CommentLike[]
+
+  @@index([postId])
+  @@index([postId, parentId, createdAt])
+  @@index([parentId])
+  @@index([authorId])
+}
+
+model CommentLike {
+  userId    String
+  commentId String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comment   Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@id([userId, commentId])
+  @@index([commentId])
+  @@index([userId])
+}
+
+model Follow {
+  followerId  String
+  followingId String
+  createdAt   DateTime @default(now())
+  follower    User     @relation("UserFollowing", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User     @relation("UserFollowers", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@id([followerId, followingId])
+  @@index([followerId])
+  @@index([followingId])
+}
+
+model Block {
+  blockerId String
+  blockedId String
+  createdAt DateTime @default(now())
+  blocker   User     @relation("UserBlocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked   User     @relation("UserBlocked", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@id([blockerId, blockedId])
+  @@index([blockerId])
+  @@index([blockedId])
+}
+
+model AiUsage {
+  id        String   @id @default(uuid())
+  userId    String
+  date      String   // UTC YYYY-MM-DD
+  count     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([userId, date])
+}
