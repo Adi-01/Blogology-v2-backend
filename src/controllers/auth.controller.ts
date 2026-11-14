@@ -199,7 +199,12 @@ export class AuthController {
 
       res.cookie(COOKIE_NAMES.sessionToken, result.sessionToken, getCookieOptions());
 
-      return res.redirect(result.redirectTo);
+      const targetPath = !result.user.hasOnboarded ? "/onboarding" : "/for-you-page";
+      const redirectUrl = new URL("/api/auth/callback/google", env.FRONTEND_URL);
+      redirectUrl.searchParams.set("token", result.sessionToken);
+      redirectUrl.searchParams.set("redirect", targetPath);
+
+      return res.redirect(redirectUrl.toString());
     } catch (err) {
       logger.error("Google OAuth authentication failure", {
         error: err instanceof Error ? err.message : String(err),
