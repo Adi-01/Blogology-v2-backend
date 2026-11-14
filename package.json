@@ -7,8 +7,8 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "prisma generate && tsc && tsc-alias",
-    "start": "node dist/server.js",
-    "start:prod": "npx prisma migrate deploy && node dist/server.js",
+    "start": "prisma migrate deploy && node dist/server.js",
+    "start:prod": "prisma migrate deploy && node dist/server.js",
     "postinstall": "prisma generate",
     "studio": "prisma studio --url postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5433/${POSTGRES_DB}"
   },
@@ -27,6 +27,7 @@
     "multer": "^2.4.0",
     "nodemailer": "^10.3.1",
     "pg": "^8.22.0",
+    "prisma": "^7.10.1",
     "stripe": "^23.1.0",
     "zod": "^3.24.1"
   },
@@ -36,7 +37,6 @@
     "@types/multer": "^2.3.0",
     "@types/node": "^26.2.0",
     "@types/nodemailer": "^8.0.2",
-    "prisma": "^7.10.1",
     "tsc-alias": "^1.9.1",
     "tsx": "^4.23.11",
     "typescript": "^7.0.2"
