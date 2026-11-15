@@ -83,7 +83,7 @@ export class SearchService {
   }
 
   /**
-   * Searches non-deleted users by username (case-insensitive substring) with
+   * Searches non-deleted users by username or name (case-insensitive substring) with
    * deterministic cursor pagination and follower/post counts (no N+1).
    */
   async searchUsers(rawQuery: string, options: SearchOptions = {}) {
@@ -94,10 +94,20 @@ export class SearchService {
     const users = await prisma.user.findMany({
       where: {
         ...visibleUserWhere(requesterId),
-        username: {
-          contains: q,
-          mode: "insensitive",
-        },
+        OR: [
+          {
+            username: {
+              contains: q,
+              mode: "insensitive",
+            },
+          },
+          {
+            name: {
+              contains: q,
+              mode: "insensitive",
+            },
+          },
+        ],
       },
       orderBy: [{ username: "asc" }, { id: "asc" }],
       take: limit + 1,

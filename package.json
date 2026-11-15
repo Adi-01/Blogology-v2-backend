@@ -10,6 +10,7 @@
     "start": "prisma migrate deploy && node dist/server.js",
     "start:prod": "prisma migrate deploy && node dist/server.js",
     "postinstall": "prisma generate",
+    "seed:content": "tsx src/scripts/seed-production-content.ts",
     "studio": "prisma studio --url postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5433/${POSTGRES_DB}"
   },
   "keywords": [],

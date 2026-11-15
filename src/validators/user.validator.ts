@@ -47,7 +47,7 @@ export const toggleBlockBodySchema = z
 
 export const saveInterestsBodySchema = z.object({
   tagIds: z
-    .array(z.string().uuid("Invalid tag ID."))
+    .array(z.string().min(1, "Tag identifier cannot be empty."))
     .min(3, "Please select at least 3 interest tags."),
 });
 

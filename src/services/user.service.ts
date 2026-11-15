@@ -373,9 +373,14 @@ export class UserService {
       });
     }
 
-    // Validate that all tagIds exist
+    // Validate that all tagIds or tag names exist
     const validTags = await prisma.tag.findMany({
-      where: { id: { in: tagIds } },
+      where: {
+        OR: [
+          { id: { in: tagIds } },
+          { name: { in: tagIds.map((t) => t.toLowerCase().trim()) } },
+        ],
+      },
       select: { id: true },
     });
 
