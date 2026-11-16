@@ -101,10 +101,49 @@ export class AuthService {
   async register(input: RegisterInput, metadata?: SessionMetadata): Promise<AuthResult> {
     const existingEmail = await prisma.user.findUnique({
       where: { email: input.email },
-      select: { id: true },
+      select: { id: true, isDeleted: true },
     });
 
     if (existingEmail) {
+      if (existingEmail.isDeleted) {
+        // Reactivate soft-deleted user account with fresh password and name
+        const passwordHash = await bcrypt.hash(input.password, 12);
+        const user = await prisma.user.update({
+          where: { id: existingEmail.id },
+          data: {
+            isDeleted: false,
+            passwordHash,
+            name: input.name,
+          },
+          select: {
+            id: true,
+            email: true,
+            username: true,
+            name: true,
+            avatar: true,
+            planId: true,
+            hasOnboarded: true,
+          },
+        });
+
+        const authenticatedUser: AuthenticatedUser = {
+          id: user.id,
+          email: user.email,
+          username: user.username,
+          name: user.name,
+          avatar: user.avatar,
+          planId: user.planId,
+          hasOnboarded: user.hasOnboarded,
+        };
+
+        const sessionToken = await this.createSessionRecord(authenticatedUser, metadata);
+
+        return {
+          user: authenticatedUser,
+          sessionToken,
+        };
+      }
+
       throw new ConflictError({
         code: "EMAIL_ALREADY_EXISTS",
         message: "An account with this email already exists.",
@@ -449,14 +488,27 @@ export class AuthService {
 
     if (user) {
       if (user.isDeleted) {
-        throw new UnauthorizedError({
-          code: "ACCOUNT_DEACTIVATED",
-          message: "This account has been deactivated.",
+        // Reactivate soft-deleted user account upon Google OAuth login/signup
+        user = await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            isDeleted: false,
+            name: user.name || googleUser.name || "User",
+            avatar: googleUser.picture || user.avatar,
+          },
+          select: {
+            id: true,
+            email: true,
+            username: true,
+            name: true,
+            avatar: true,
+            planId: true,
+            hasOnboarded: true,
+            isDeleted: true,
+          },
         });
-      }
-
-      // If avatar was not set, populate it from Google picture
-      if (!user.avatar && googleUser.picture) {
+      } else if (!user.avatar && googleUser.picture) {
+        // If avatar was not set, populate it from Google picture
         user = await prisma.user.update({
           where: { id: user.id },
           data: { avatar: googleUser.picture },
