@@ -106,48 +106,15 @@ export class AuthService {
 
     if (existingEmail) {
       if (existingEmail.isDeleted) {
-        // Reactivate soft-deleted user account with fresh password and name
-        const passwordHash = await bcrypt.hash(input.password, 12);
-        const user = await prisma.user.update({
-          where: { id: existingEmail.id },
-          data: {
-            isDeleted: false,
-            passwordHash,
-            name: input.name,
-          },
-          select: {
-            id: true,
-            email: true,
-            username: true,
-            name: true,
-            avatar: true,
-            planId: true,
-            hasOnboarded: true,
-          },
+        // Old account was deleted: purge it completely (cascading all posts/interactions)
+        // so the user starts fresh with a new registration and onboarding flow
+        await prisma.user.delete({ where: { id: existingEmail.id } });
+      } else {
+        throw new ConflictError({
+          code: "EMAIL_ALREADY_EXISTS",
+          message: "An account with this email already exists.",
         });
-
-        const authenticatedUser: AuthenticatedUser = {
-          id: user.id,
-          email: user.email,
-          username: user.username,
-          name: user.name,
-          avatar: user.avatar,
-          planId: user.planId,
-          hasOnboarded: user.hasOnboarded,
-        };
-
-        const sessionToken = await this.createSessionRecord(authenticatedUser, metadata);
-
-        return {
-          user: authenticatedUser,
-          sessionToken,
-        };
       }
-
-      throw new ConflictError({
-        code: "EMAIL_ALREADY_EXISTS",
-        message: "An account with this email already exists.",
-      });
     }
 
     let username = input.username;
@@ -486,29 +453,16 @@ export class AuthService {
       },
     });
 
+    if (user && user.isDeleted) {
+      // Old account was deleted: purge it completely (cascading all posts/interactions)
+      // so the user gets a clean slate and is treated as a first-time Google sign up
+      await prisma.user.delete({ where: { id: user.id } });
+      user = null;
+    }
+
     if (user) {
-      if (user.isDeleted) {
-        // Reactivate soft-deleted user account upon Google OAuth login/signup
-        user = await prisma.user.update({
-          where: { id: user.id },
-          data: {
-            isDeleted: false,
-            name: user.name || googleUser.name || "User",
-            avatar: googleUser.picture || user.avatar,
-          },
-          select: {
-            id: true,
-            email: true,
-            username: true,
-            name: true,
-            avatar: true,
-            planId: true,
-            hasOnboarded: true,
-            isDeleted: true,
-          },
-        });
-      } else if (!user.avatar && googleUser.picture) {
-        // If avatar was not set, populate it from Google picture
+      // If avatar was not set, populate it from Google picture
+      if (!user.avatar && googleUser.picture) {
         user = await prisma.user.update({
           where: { id: user.id },
           data: { avatar: googleUser.picture },
