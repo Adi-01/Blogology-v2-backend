@@ -37,6 +37,11 @@ export interface SessionView {
   isCurrent: boolean;
 }
 
+function getDefaultAvatar(name: string): string {
+  const seed = encodeURIComponent(name.trim() || "User");
+  return `https://api.dicebear.com/9.x/initials/svg?seed=${seed}`;
+}
+
 export class AuthService {
   hashToken(token: string): string {
     return crypto.createHash("sha256").update(token).digest("hex");
@@ -151,6 +156,7 @@ export class AuthService {
         email: input.email,
         username,
         name: input.name,
+        avatar: getDefaultAvatar(input.name),
         passwordHash,
         planId: freePlan.id,
         hasOnboarded: false,
@@ -207,12 +213,21 @@ export class AuthService {
       });
     }
 
+    let userAvatar = user.avatar;
+    if (!userAvatar || userAvatar.includes("googleusercontent.com")) {
+      userAvatar = getDefaultAvatar(user.name);
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { avatar: userAvatar },
+      });
+    }
+
     const authenticatedUser: AuthenticatedUser = {
       id: user.id,
       email: user.email,
       username: user.username,
       name: user.name,
-      avatar: user.avatar,
+      avatar: userAvatar,
       planId: user.planId,
       hasOnboarded: user.hasOnboarded,
     };
@@ -461,11 +476,12 @@ export class AuthService {
     }
 
     if (user) {
-      // If avatar was not set, populate it from Google picture
-      if (!user.avatar && googleUser.picture) {
+      // If avatar was not set or using broken Google CDN, populate with DiceBear initials
+      const isBrokenGoogleAvatar = user.avatar?.includes("googleusercontent.com");
+      if (!user.avatar || isBrokenGoogleAvatar) {
         user = await prisma.user.update({
           where: { id: user.id },
-          data: { avatar: googleUser.picture },
+          data: { avatar: getDefaultAvatar(user.name || googleUser.name || user.username) },
           select: {
             id: true,
             email: true,
@@ -499,12 +515,14 @@ export class AuthService {
         username = `${emailPrefix}_${crypto.randomBytes(3).toString("hex")}`;
       }
 
+      const displayName = googleUser.name || username;
+
       user = await prisma.user.create({
         data: {
           email: normalizedEmail,
           username,
-          name: googleUser.name || username,
-          avatar: googleUser.picture || null,
+          name: displayName,
+          avatar: getDefaultAvatar(displayName),
           passwordHash: null, // Nullable for OAuth-only users
           planId: freePlan.id,
           hasOnboarded: false,
@@ -522,12 +540,21 @@ export class AuthService {
       });
     }
 
+    let userAvatar = user.avatar;
+    if (!userAvatar || userAvatar.includes("googleusercontent.com")) {
+      userAvatar = getDefaultAvatar(user.name);
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { avatar: userAvatar },
+      });
+    }
+
     const authenticatedUser: AuthenticatedUser = {
       id: user.id,
       email: user.email,
       username: user.username,
       name: user.name,
-      avatar: user.avatar,
+      avatar: userAvatar,
       planId: user.planId,
       hasOnboarded: user.hasOnboarded,
     };
